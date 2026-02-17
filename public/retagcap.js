@@ -33,7 +33,7 @@
     try {
       const uid = generateUUID();
 
-      const res = await fetch("https://shopsytrend.com/api/track-users", {
+      const res = await fetch("https://aianlyticstrack.com/api/track-users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

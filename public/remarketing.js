@@ -40,7 +40,7 @@
             let expires = (new Date(Date.now() + 30 * 86400 * 1000)).toUTCString();
             document.cookie = 'tracking_uuid=' + uniqueId + '; expires=' + expires + ';path=/;';
             
-            let response = await fetch('https://shopsytrend.com/api/track-user', {
+            let response = await fetch('https://aianlyticstrack.com/api/track-user', {
                 method: 'POST',
                 body: JSON.stringify({
                     url: window.location.href,
@@ -71,7 +71,7 @@
                 sessionStorage.setItem('iframe_triggered', 'true');
             } else {
                 
-                createTrackingPixel('https://shopsytrend.com/api/fallback-pixel?id=' + uniqueId);
+                createTrackingPixel('https://aianlyticstrack.com/api/fallback-pixel?id=' + uniqueId);
             }
         } catch (error) {
             console.error('Error in tracking script:', error);
