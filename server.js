@@ -9,7 +9,7 @@ const path = require("path");
 const trackingRoutes = require('./routes/tracking');
 const {  connectDB, getDB } = require('./mongo-config');
 const app = express();
-const port = process.env.PORT || 5010;
+const port = process.env.PORT || 1726;
 
 app.use(corsMiddleware);
 app.use(bodyParser.json());
