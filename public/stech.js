@@ -122,43 +122,13 @@ onDOMReady(function() {
         
     }
 
-    if (window.location.hostname === "www.fareastflora.com") {
-        initTracking();
-    }
+     initTracking();
 
-    if (window.location.hostname === "checkout.accorplus.com") {
-        initTracking();
-    }
-
-     if (window.location.hostname === "www.studio7thailand.com") {
-        if (isCartPage()) {
+       if (isCartPage()) {
             initTracking();
-            initTracking();
-             setTimeout(initTracking, 2000);
-        }
         
-        
-    }
-
-      if (window.location.hostname === "www.bnn.in.th") {
-        if (isCartPage()) {
-            initTracking();
         }
-    }
 
-    if (window.location.hostname === "gfiberprepaid.globe.com.ph") {
-        initTracking();
-    }
-
- if (window.location.hostname === "shop.globe.com.ph") {
-        initTracking();
-    }
-
-     if (window.location.hostname === "www.watsons.com.hk") {
-        if (isCartPage()) {
-            initTracking();
-        }
-    }
 
 });
 
