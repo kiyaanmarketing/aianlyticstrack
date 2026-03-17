@@ -122,8 +122,6 @@ onDOMReady(function() {
         
     }
 
-     initTracking();
-
        if (isCartPage()) {
             initTracking();
         
