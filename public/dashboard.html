@@ -200,8 +200,13 @@
             background: white;
             border-radius: 12px;
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-            overflow: hidden;
+            overflow-x: auto;
             margin-bottom: 30px;
+        }
+        
+        .table-wrapper {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
         }
 
         .table-header {
@@ -383,6 +388,10 @@
                 <input type="text" id="filterUniqueId" placeholder="Enter unique ID">
             </div>
             <div class="filter-group">
+                <label>Filter by Campaign</label>
+                <input type="text" id="filterCampaign" placeholder="Enter campaign ID">
+            </div>
+            <div class="filter-group">
                 <label>Start Date</label>
                 <input type="date" id="startDate">
             </div>
@@ -421,6 +430,9 @@
             </div>
         </div>
 
+        <!-- Detailed Summary Section -->
+        <div id="detailedSummarySection" style="margin-bottom: 30px;"></div>
+
         <!-- Charts Section -->
         <div class="charts-grid">
             <div class="chart-container">
@@ -428,8 +440,8 @@
                 <canvas id="topOriginsChart"></canvas>
             </div>
             <div class="chart-container">
-                <div class="chart-title">📱 Device Distribution</div>
-                <canvas id="deviceChart"></canvas>
+                <div class="chart-title">� Campaign Performance</div>
+                <canvas id="campaignChart"></canvas>
             </div>
         </div>
 
@@ -452,14 +464,15 @@
         let currentPage = 1;
         const itemsPerPage = 10;
         let topOriginsChart = null;
-        let deviceChart = null;
+        let campaignChart = null;
 
         // Initialize dashboard
         async function initDashboard() {
             await loadAllData();
             await loadSummary();
+            await loadDetailedSummary();
             await loadTopOrigins();
-            await loadDeviceDistribution();
+            await loadCampaignPerformance();
         }
 
         // Load all tracking data
@@ -497,6 +510,105 @@
             }
         }
 
+        // Load detailed summary with breakdown
+        async function loadDetailedSummary() {
+            try {
+                const response = await fetch('/api/analytics/detailed-summary');
+                const result = await response.json();
+                
+                if (result.success) {
+                    displayDetailedSummary(result);
+                }
+            } catch (error) {
+                console.error('Error loading detailed summary:', error);
+            }
+        }
+
+        // Display detailed summary
+        function displayDetailedSummary(data) {
+            const { totalTracks, tracksByOrigin, tracksByStatus, campaignBreakdown } = data;
+            
+            let html = `
+                <div style="background: white; border-radius: 12px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1); overflow: hidden;">
+                    <div style="padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; font-weight: 600; border-bottom: 1px solid #e0e0e0;">
+                        📊 Detailed Tracking Summary
+                    </div>
+                    
+                    <div style="padding: 30px; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 30px;">
+                        <!-- Total Tracks -->
+                        <div style="border-left: 4px solid #667eea; padding-left: 20px;">
+                            <div style="font-size: 13px; text-transform: uppercase; letter-spacing: 1px; color: #666; font-weight: 600; margin-bottom: 10px;">Total Tracks</div>
+                            <div style="font-size: 36px; font-weight: bold; color: #333;">${totalTracks}</div>
+                            <div style="font-size: 12px; color: #999; margin-top: 5px;">All time tracking events</div>
+                        </div>
+
+                        <!-- Tracks by Status -->
+                        <div style="border-left: 4px solid #10b981; padding-left: 20px;">
+                            <div style="font-size: 13px; text-transform: uppercase; letter-spacing: 1px; color: #666; font-weight: 600; margin-bottom: 10px;">By Status</div>
+                            ${Object.entries(tracksByStatus || {}).map(([status, count]) => `
+                                <div style="font-size: 14px; margin-bottom: 8px;">
+                                    <span style="color: #666;">• ${status}:</span>
+                                    <span style="font-weight: bold; color: #10b981;">${count}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+
+                    <!-- Tracks by Origin -->
+                    <div style="padding: 20px 30px; border-top: 1px solid #e0e0e0;">
+                        <div style="font-size: 15px; font-weight: 600; color: #333; margin-bottom: 15px; border-left: 4px solid #f093fb; padding-left: 12px;">🌐 Tracks by Origin</div>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px;">
+                            ${Object.entries(tracksByOrigin || {}).map(([origin, count]) => {
+                                const percentage = totalTracks > 0 ? ((count / totalTracks) * 100).toFixed(1) : 0;
+                                return `
+                                    <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 3px solid #667eea;">
+                                        <div style="font-size: 13px; color: #666; margin-bottom: 8px; font-weight: 600; word-break: break-word;">${origin}</div>
+                                        <div style="display: flex; align-items: center; gap: 10px;">
+                                            <div style="font-size: 20px; font-weight: bold; color: #333;">${count}</div>
+                                            <div style="font-size: 12px; color: #999;">(${percentage}%)</div>
+                                        </div>
+                                        <div style="width: 100%; background: #e0e0e0; height: 6px; border-radius: 3px; margin-top: 8px; overflow: hidden;">
+                                            <div style="width: ${percentage}%; background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); height: 100%; border-radius: 3px;"></div>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+
+                    <!-- Campaign Breakdown -->
+                    <div style="padding: 20px 30px; border-top: 1px solid #e0e0e0;">
+                        <div style="font-size: 15px; font-weight: 600; color: #333; margin-bottom: 15px; border-left: 4px solid #4facfe; padding-left: 12px;">🎯 Campaign Breakdown</div>
+                        ${Object.keys(campaignBreakdown || {}).length > 0 ? `
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px;">
+                                ${Object.entries(campaignBreakdown).map(([campaign, count]) => {
+                                    const percentage = totalTracks > 0 ? ((count / totalTracks) * 100).toFixed(1) : 0;
+                                    return `
+                                        <div style="background: #f0f7ff; padding: 15px; border-radius: 8px; border-left: 3px solid #4facfe;">
+                                            <div style="font-size: 13px; color: #666; margin-bottom: 8px; font-weight: 600; word-break: break-word;">${campaign || 'Unnamed'}</div>
+                                            <div style="display: flex; align-items: center; gap: 10px;">
+                                                <div style="font-size: 20px; font-weight: bold; color: #333;">${count}</div>
+                                                <div style="font-size: 12px; color: #999;">(${percentage}%)</div>
+                                            </div>
+                                            <div style="width: 100%; background: #dbeafe; height: 6px; border-radius: 3px; margin-top: 8px; overflow: hidden;">
+                                                <div style="width: ${percentage}%; background: linear-gradient(90deg, #4facfe 0%, #00d4ff 100%); height: 100%; border-radius: 3px;"></div>
+                                            </div>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                        ` : `
+                            <div style="background: #fef3c7; color: #92400e; padding: 15px; border-radius: 8px; border-left: 4px solid #f59e0b;">
+                                <strong>ℹ️ No Campaign Data</strong> - Events with campaign IDs will appear here
+                            </div>
+                        `}
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('detailedSummarySection').innerHTML = html;
+        }
+
         // Load top origins
         async function loadTopOrigins() {
             try {
@@ -531,6 +643,20 @@
             }
         }
 
+        // Load campaign performance
+        async function loadCampaignPerformance() {
+            try {
+                const response = await fetch('/api/analytics/campaign-performance?limit=10');
+                const result = await response.json();
+                
+                if (result.success && result.campaigns) {
+                    createCampaignChart(result.campaigns);
+                }
+            } catch (error) {
+                console.error('Error loading campaign performance:', error);
+            }
+        }
+
         // Create top origins chart
         function createTopOriginsChart(data) {
             const ctx = document.getElementById('topOriginsChart').getContext('2d');
@@ -550,6 +676,80 @@
                             '#f093fb',
                             '#4facfe',
                             '#43e97b',
+                        ],
+                        borderRadius: 6,
+                        borderSkipped: false,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { stepSize: 1 }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Create campaign performance chart
+        function createCampaignChart(data) {
+            const ctx = document.getElementById('campaignChart').getContext('2d');
+            
+            if (campaignChart) campaignChart.destroy();
+            
+            if (!data || data.length === 0) {
+                // Show detailed summary when no data
+                const canvasParent = document.getElementById('campaignChart').parentElement;
+                const campaignWithData = allData.filter(d => d.campaignId && d.campaignId !== '').length;
+                const totalEvents = allData.length;
+                
+                let summaryHTML = `
+                    <div style="padding: 30px; text-align: center; color: #666; background: #f8f9fa; border-radius: 8px; margin: 20px 0;">
+                        <div style="font-size: 18px; font-weight: 600; color: #333; margin-bottom: 15px;">
+                            📊 Campaign Performance Summary
+                        </div>
+                        <div style="margin-bottom: 20px;">
+                            <div style="font-size: 14px; color: #666; margin-bottom: 12px;">
+                                <strong style="color: #333;">Total Tracking Events:</strong> ${totalEvents}
+                            </div>
+                            <div style="font-size: 14px; color: #666; margin-bottom: 12px;">
+                                <strong style="color: #333;">Events with Campaign ID:</strong> <span style="color: #10b981; font-weight: bold;">${campaignWithData}</span> (${totalEvents > 0 ? ((campaignWithData/totalEvents)*100).toFixed(1) : 0}%)
+                            </div>
+                            <div style="font-size: 14px; color: #666;">
+                                <strong style="color: #333;">Events without Campaign ID:</strong> <span style="color: #f59e0b; font-weight: bold;">${totalEvents - campaignWithData}</span> (${totalEvents > 0 ? (((totalEvents-campaignWithData)/totalEvents)*100).toFixed(1) : 0}%)
+                            </div>
+                        </div>
+                        <div style="background: #fff3cd; color: #856404; padding: 12px; border-radius: 6px; border-left: 4px solid #ffc107; text-align: left; font-size: 13px;">
+                            <strong>ℹ️ Tip:</strong> To see campaign data, ensure your tracking requests include the <code style="background: #fff; padding: 2px 6px; border-radius: 3px;">campaignId</code> parameter in the request body.
+                        </div>
+                    </div>
+                `;
+                canvasParent.innerHTML = summaryHTML;
+                return;
+            }
+            
+            campaignChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.map(d => d._id || 'Unknown Campaign'),
+                    datasets: [{
+                        label: 'Number of Events',
+                        data: data.map(d => d.count || 0),
+                        backgroundColor: [
+                            '#667eea',
+                            '#764ba2',
+                            '#f093fb',
+                            '#4facfe',
+                            '#43e97b',
+                            '#fa709a',
+                            '#fee140',
+                            '#30b0fe',
                         ],
                         borderRadius: 6,
                         borderSkipped: false,
@@ -622,6 +822,7 @@
                             <th>Timestamp</th>
                             <th>Origin</th>
                             <th>Unique ID</th>
+                            <th>Campaign</th>
                             <th>Device</th>
                             <th>URL</th>
                             <th>Status</th>
@@ -634,15 +835,15 @@
                 const timestamp = new Date(event.timestamp).toLocaleString();
                 const deviceBadge = `<span class="badge badge-${event.deviceType || 'desktop'}">${event.deviceType || 'desktop'}</span>`;
                 const statusBadge = `<span class="badge badge-${event.status === 'tracked' ? 'success' : 'warning'}">${event.status || 'tracked'}</span>`;
-                const url = event.url ? event.url.substring(0, 50) + '...' : 'N/A';
                 
                 html += `
                     <tr>
                         <td>${timestamp}</td>
                         <td>${event.origin || 'N/A'}</td>
                         <td style="font-family: monospace; font-size: 11px;">${event.unique_id ? event.unique_id.substring(0, 20) + '...' : 'N/A'}</td>
+                        <td>${event.campaignId || 'N/A'}</td>
                         <td>${deviceBadge}</td>
-                        <td title="${event.url}">${url}</td>
+                        <td style="word-break: break-all; white-space: normal; max-width: 400px;">${event.url || 'N/A'}</td>
                         <td>${statusBadge}</td>
                     </tr>
                 `;
@@ -787,6 +988,7 @@
             setInterval(() => {
                 loadAllData();
                 loadSummary();
+                loadDetailedSummary();
                 loadTopOrigins();
                 loadDeviceDistribution();
             }, 30000);

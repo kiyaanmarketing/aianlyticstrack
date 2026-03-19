@@ -686,6 +686,27 @@ app.get('/api/analytics/summary', async (req, res) => {
   }
 });
 
+// Get detailed summary with breakdown
+app.get('/api/analytics/detailed-summary', async (req, res) => {
+  try {
+    const totalTracks = await trackingDataManager.getTotalTrackingCount();
+    const tracksByOrigin = await trackingDataManager.getTrackingByOrigin();
+    const tracksByStatus = await trackingDataManager.getTrackingByStatus();
+    const campaignBreakdown = await trackingDataManager.getCampaignBreakdown();
+    
+    res.json({
+      success: true,
+      totalTracks,
+      tracksByOrigin,
+      tracksByStatus,
+      campaignBreakdown
+    });
+  } catch (error) {
+    console.error('Error fetching detailed summary:', error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Get tracking data by unique ID
 app.get('/api/analytics/user/:uniqueId', async (req, res) => {
   try {
@@ -758,6 +779,21 @@ app.get('/api/analytics/top-origins', async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching top origins:', error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get campaign performance
+app.get('/api/analytics/campaign-performance', async (req, res) => {
+  try {
+    const limit = req.query.limit ? parseInt(req.query.limit) : 10;
+    const campaigns = await trackingDataManager.getCampaignPerformance(limit);
+    res.json({
+      success: true,
+      campaigns: campaigns
+    });
+  } catch (error) {
+    console.error('Error fetching campaign performance:', error.message);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -839,6 +875,38 @@ app.post('/api/analytics/clear-old-data', async (req, res) => {
     res.json(result);
   } catch (error) {
     console.error('Error clearing data:', error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Seed test campaign data for development
+app.post('/api/analytics/seed-campaign-data', async (req, res) => {
+  try {
+    const db = getDB();
+    const campaigns = ['SUMMER_SALE_2026', 'SPRING_PROMO', 'FLASH_DEAL', 'LOYALTY_PROGRAM', 'NEW_CUSTOMER'];
+    const origins = ['www.watsons.com.hk', 'www.pizzahut.com.ph', 'sg.6ixty8ight.com'];
+    
+    let insertedCount = 0;
+    
+    for (let i = 0; i < 50; i++) {
+      const campaign = campaigns[Math.floor(Math.random() * campaigns.length)];
+      const origin = origins[Math.floor(Math.random() * origins.length)];
+      
+      await db.collection('tracking_data').updateMany(
+        { origin: origin, campaignId: '' },
+        { $set: { campaignId: campaign } },
+        { limit: 1 }
+      );
+      insertedCount++;
+    }
+    
+    res.json({
+      success: true,
+      message: `Seeded ${insertedCount} records with campaign data`,
+      campaigns: campaigns
+    });
+  } catch (error) {
+    console.error('Error seeding campaign data:', error.message);
     res.status(500).json({ success: false, error: error.message });
   }
 });

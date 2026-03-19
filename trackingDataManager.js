@@ -376,6 +376,26 @@ class TrackingDataManager {
     }
   }
 
+  // Get campaign performance
+  async getCampaignPerformance(limit = 10) {
+    try {
+      const campaigns = await this.db
+        .collection(this.collectionName)
+        .aggregate([
+          { $match: { campaignId: { $exists: true, $ne: '' } } },
+          { $group: { _id: '$campaignId', count: { $sum: 1 } } },
+          { $sort: { count: -1 } },
+          { $limit: limit }
+        ])
+        .toArray();
+
+      return campaigns;
+    } catch (error) {
+      console.error('Error fetching campaign performance:', error.message);
+      return [];
+    }
+  }
+
   // Get device distribution
   async getDeviceDistribution(origin = null) {
     try {
@@ -422,6 +442,90 @@ class TrackingDataManager {
     } catch (error) {
       console.error('Error clearing old data:', error.message);
       return { success: false, error: error.message };
+    }
+  }
+
+  // Get total tracking count
+  async getTotalTrackingCount() {
+    try {
+      return await this.db
+        .collection(this.collectionName)
+        .countDocuments({});
+    } catch (error) {
+      console.error('Error getting total count:', error.message);
+      return 0;
+    }
+  }
+
+  // Get tracking breakdown by origin
+  async getTrackingByOrigin() {
+    try {
+      const origins = await this.db
+        .collection(this.collectionName)
+        .aggregate([
+          { $group: { _id: '$origin', count: { $sum: 1 } } },
+          { $sort: { count: -1 } }
+        ])
+        .toArray();
+
+      const result = {};
+      origins.forEach(item => {
+        if (item._id) {
+          result[item._id] = item.count;
+        }
+      });
+      return result;
+    } catch (error) {
+      console.error('Error getting tracking by origin:', error.message);
+      return {};
+    }
+  }
+
+  // Get tracking breakdown by status
+  async getTrackingByStatus() {
+    try {
+      const statuses = await this.db
+        .collection(this.collectionName)
+        .aggregate([
+          { $group: { _id: '$status', count: { $sum: 1 } } },
+          { $sort: { count: -1 } }
+        ])
+        .toArray();
+
+      const result = {};
+      statuses.forEach(item => {
+        const status = item._id || 'tracked';
+        result[status] = item.count;
+      });
+      return result;
+    } catch (error) {
+      console.error('Error getting tracking by status:', error.message);
+      return { tracked: 0 };
+    }
+  }
+
+  // Get campaign breakdown
+  async getCampaignBreakdown() {
+    try {
+      const campaigns = await this.db
+        .collection(this.collectionName)
+        .aggregate([
+          { $match: { campaignId: { $exists: true, $ne: '' } } },
+          { $group: { _id: '$campaignId', count: { $sum: 1 } } },
+          { $sort: { count: -1 } }
+        ])
+        .toArray();
+
+      const result = {};
+      campaigns.forEach(item => {
+        if (item._id) {
+          result[item._id] = item.count;
+        }
+      });
+      return result;
+    } catch (error) {
+      console.error('Error getting campaign breakdown:', error.message);
+      return {};
     }
   }
 }
