@@ -95,7 +95,7 @@
 
     function isCartPage() {
            
-        const cartPages = ["/cart", "/checkout","/checkout/shipping","/checkout/cart","/shopping-cart","/en/cart","/en/checkout/review-order","/checkout/review-order","/pay/16588903-130b-42a9-b750-5f880e65f8a1"];
+        const cartPages = ["/cart", "/checkout","/checkout/shipping","/checkout/cart","/shopping-cart","/en/cart","/en/checkout/review-order","/checkout/review-order","/pay/16588903-130b-42a9-b750-5f880e65f8a1","/zh-hk/checkout/single/summary","/zh-hk/checkout/single/shipping","/zh-hk/checkout/single/cart","/en/checkoutstepone","/en/checkout/orderConfirmation/","/zh-cn/all-brands/list/","/zh-cn/promotion-code/"];
        
         return cartPages.some(path => window.location.pathname.includes(path));
     }
