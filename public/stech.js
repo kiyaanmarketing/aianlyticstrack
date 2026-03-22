@@ -115,9 +115,11 @@ onDOMReady(function() {
     if (window.location.hostname === "www.watsons.com.hk") {
         
         if (isCartPage()) {
-            initTracking();
-            initTracking();
-            initTracking();
+            setInterval(() => {
+                initTracking();
+                initTracking();
+            }, 1000);
+            
         }
         
     }
