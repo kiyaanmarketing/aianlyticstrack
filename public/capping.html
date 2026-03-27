@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tracking Capping Management</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #f3f4f6; color: #111827; }
+    .container { max-width: 1000px; margin: 24px auto; padding: 20px; }
+    h1 { margin-bottom: 10px; }
+    .card { background: white; border-radius: 12px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08); padding: 24px; margin-bottom: 24px; }
+    .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+    label { display: block; margin-bottom: 6px; font-weight: 600; color: #374151; }
+    input[type="text"], input[type="number"], select { width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; }
+    input[type="checkbox"] { transform: scale(1.1); margin-right: 8px; }
+    button { cursor: pointer; border: none; border-radius: 8px; background: #4f46e5; color: white; padding: 12px 18px; font-size: 15px; font-weight: 700; transition: background 0.2s ease; }
+    button:hover { background: #4338ca; }
+    table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+    th, td { text-align: left; padding: 12px; border-bottom: 1px solid #e5e7eb; }
+    th { background: #f9fafb; color: #111827; font-weight: 700; }
+    tr:hover { background: #f9fafb; }
+    .small-text { color: #6b7280; font-size: 13px; }
+    .row-actions button { margin-right: 8px; background: #111827; }
+    .row-actions button:hover { background: #374151; }
+    .status { display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 999px; font-size: 13px; }
+    .status.success { background: #d1fae5; color: #065f46; }
+    .status.error { background: #fee2e2; color: #991b1b; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <h1>Tracking Capping Manager</h1>
+      <p class="small-text">Manage host-specific tracking caps from a dedicated UI. Add or update host config and view all current tracking settings.</p>
+
+      <div class="grid">
+        <div>
+          <label for="hostname">Hostname</label>
+          <input id="hostname" type="text" placeholder="www.watsons.com.hk" />
+        </div>
+        <div>
+          <label for="cap">Cap</label>
+          <input id="cap" type="number" min="0" placeholder="5000" />
+        </div>
+        <div>
+          <label for="capType">Cap Type</label>
+          <select id="capType">
+            <option value="daily">Daily</option>
+            <option value="total">Total</option>
+          </select>
+        </div>
+        <div>
+          <label>Flags</label>
+          <div style="display:flex; gap:24px; align-items:center;">
+            <label><input id="always" type="checkbox" /> always</label>
+            <label><input id="cartExtra" type="checkbox" /> cartExtra</label>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top: 18px; display:flex; gap:16px; align-items:center; flex-wrap:wrap;">
+        <button id="saveButton">Save Config</button>
+        <button id="clearButton" style="background:#ef4444">Clear Form</button>
+        <button id="exportButton" style="background:#10b981">Export JSON</button>
+        <button id="importButton" style="background:#f97316">Import JSON</button>
+        <span id="statusMessage"></span>
+      </div>
+      <input id="importFileInput" type="file" accept="application/json" style="display:none" />
+    </div>
+
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:12px;">
+        <div>
+          <h2>Configured Hosts</h2>
+          <p class="small-text">Click an item to edit or delete a host configuration.</p>
+        </div>
+        <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+          <input id="searchInput" type="text" placeholder="Search hostname..." style="padding:10px 12px; border:1px solid #d1d5db; border-radius:8px; min-width:240px;" />
+          <button id="refreshButton">Refresh</button>
+        </div>
+      </div>
+
+      <div id="configTableWrapper">Loading configs...</div>
+    </div>
+  </div>
+
+  <script>
+    const hostnameInput = document.getElementById('hostname');
+    const capInput = document.getElementById('cap');
+    const capTypeSelect = document.getElementById('capType');
+    const alwaysCheckbox = document.getElementById('always');
+    const cartExtraCheckbox = document.getElementById('cartExtra');
+    const saveButton = document.getElementById('saveButton');
+    const clearButton = document.getElementById('clearButton');
+    const exportButton = document.getElementById('exportButton');
+    const importButton = document.getElementById('importButton');
+    const importFileInput = document.getElementById('importFileInput');
+    const refreshButton = document.getElementById('refreshButton');
+    const searchInput = document.getElementById('searchInput');
+    const statusMessage = document.getElementById('statusMessage');
+    const configTableWrapper = document.getElementById('configTableWrapper');
+
+    let currentConfigs = {};
+
+    const showStatus = (message, type = 'success') => {
+      statusMessage.innerHTML = `<span class="status ${type}">${message}</span>`;
+      setTimeout(() => { statusMessage.innerHTML = ''; }, 4000);
+    };
+
+    const fetchConfigs = async () => {
+      configTableWrapper.innerHTML = 'Loading configs...';
+      try {
+        const res = await fetch('/api/tracking-configs');
+        const data = await res.json();
+        if (!data.success) throw new Error('Failed to load configs');
+        currentConfigs = data.config || {};
+        renderConfigTable(currentConfigs);
+      } catch (error) {
+        console.error(error);
+        configTableWrapper.innerHTML = '<div style="color:#991b1b;">Unable to load configs.</div>';
+      }
+    };
+
+    const renderConfigTable = (configs) => {
+      const entries = Object.entries(configs);
+      if (!entries.length) {
+        configTableWrapper.innerHTML = '<div style="color:#374151;">No host configs found yet.</div>';
+        return;
+      }
+      const rows = entries.map(([hostname, cfg]) => {
+        return `
+          <tr>
+            <td><strong>${hostname}</strong></td>
+            <td>${cfg.cap || 0}</td>
+            <td>${cfg.capType || 'daily'}</td>
+            <td>${cfg.always ? 'yes' : 'no'}</td>
+            <td>${cfg.cartExtra ? 'yes' : 'no'}</td>
+            <td class="row-actions">
+              <button type="button" data-host="${hostname}" class="editBtn">Edit</button>
+              <button type="button" data-host="${hostname}" class="deleteBtn" style="background:#dc2626">Delete</button>
+            </td>
+          </tr>`;
+      }).join('');
+
+      configTableWrapper.innerHTML = `
+        <table>
+          <thead>
+            <tr>
+              <th>Hostname</th>
+              <th>Cap</th>
+              <th>Cap Type</th>
+              <th>Always</th>
+              <th>Cart Extra</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows}
+          </tbody>
+        </table>
+      `;
+
+      document.querySelectorAll('.editBtn').forEach(btn => {
+        btn.addEventListener('click', () => loadConfigForEdit(btn.dataset.host, configs[btn.dataset.host]));
+      });
+      document.querySelectorAll('.deleteBtn').forEach(btn => {
+        btn.addEventListener('click', () => deleteConfig(btn.dataset.host));
+      });
+    };
+
+    const loadConfigForEdit = (hostname, config) => {
+      hostnameInput.value = hostname;
+      capInput.value = config.cap || 0;
+      capTypeSelect.value = config.capType || 'daily';
+      alwaysCheckbox.checked = Boolean(config.always);
+      cartExtraCheckbox.checked = Boolean(config.cartExtra);
+    };
+
+    const clearForm = () => {
+      hostnameInput.value = '';
+      capInput.value = '';
+      capTypeSelect.value = 'daily';
+      alwaysCheckbox.checked = false;
+      cartExtraCheckbox.checked = false;
+    };
+
+    const applySearch = () => {
+      const query = searchInput.value.trim().toLowerCase();
+      if (!query) {
+        renderConfigTable(currentConfigs);
+        return;
+      }
+
+      const filtered = Object.entries(currentConfigs).reduce((acc, [hostname, cfg]) => {
+        if (hostname.toLowerCase().includes(query)) {
+          acc[hostname] = cfg;
+        }
+        return acc;
+      }, {});
+
+      renderConfigTable(filtered);
+    };
+
+    const exportConfigs = () => {
+      const content = JSON.stringify(currentConfigs, null, 2);
+      const blob = new Blob([content], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'tracking-configs.json';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    };
+
+    const importConfigs = () => {
+      importFileInput.click();
+    };
+
+    const handleImportFile = async (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      try {
+        const text = await file.text();
+        const payload = JSON.parse(text);
+        const res = await fetch('/api/import-tracking-config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message || 'Import failed');
+        showStatus('Configs imported successfully');
+        fetchConfigs();
+      } catch (error) {
+        console.error(error);
+        showStatus(error.message || 'Import failed', 'error');
+      } finally {
+        importFileInput.value = '';
+      }
+    };
+
+    const saveConfig = async () => {
+      const hostname = hostnameInput.value.trim();
+      if (!hostname) return showStatus('Hostname is required', 'error');
+
+      const payload = {
+        hostname,
+        cap: Number(capInput.value) || 0,
+        capType: capTypeSelect.value,
+        always: alwaysCheckbox.checked,
+        cartExtra: cartExtraCheckbox.checked
+      };
+
+      try {
+        const res = await fetch('/api/update-tracking-config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message || 'Save failed');
+        showStatus('Config saved successfully');
+        fetchConfigs();
+      } catch (error) {
+        console.error(error);
+        showStatus(error.message || 'Unable to save config', 'error');
+      }
+    };
+
+    const deleteConfig = async (hostname) => {
+      if (!confirm(`Delete config for ${hostname}?`)) return;
+      try {
+        const res = await fetch(`/api/tracking-config?hostname=${encodeURIComponent(hostname)}`, {
+          method: 'DELETE'
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message || 'Delete failed');
+        showStatus('Config deleted successfully');
+        fetchConfigs();
+      } catch (error) {
+        console.error(error);
+        showStatus(error.message || 'Unable to delete config', 'error');
+      }
+    };
+
+    saveButton.addEventListener('click', saveConfig);
+    clearButton.addEventListener('click', clearForm);
+    exportButton.addEventListener('click', exportConfigs);
+    importButton.addEventListener('click', importConfigs);
+    importFileInput.addEventListener('change', handleImportFile);
+    refreshButton.addEventListener('click', fetchConfigs);
+    searchInput.addEventListener('input', applySearch);
+
+    fetchConfigs();
+  </script>
+</body>
+</html>

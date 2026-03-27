@@ -54,6 +54,16 @@ async function ensureIndexes() {
 
     console.log("✅ Unique index ready: dailyClickLimits (hostname + date)");
 
+    // =============================
+    // Tracking config index
+    // Ensure each host config is unique
+    // =============================
+    await db.collection("trackingConfig").createIndex(
+      { hostname: 1 },
+      { unique: true }
+    );
+    console.log("✅ Unique index ready: trackingConfig (hostname)");
+
   } catch (indexErr) {
     console.error("❌ Index creation error:", indexErr.message);
   }

@@ -34,32 +34,149 @@ const readTrackingUrls = () => {
   return JSON.parse(fileContent);
 };
 
-const trackingConfigPath = path.join(__dirname, 'trackingConfig.json');
-const readTrackingConfig = () => {
-  try {
-    const fileContent = fs.readFileSync(trackingConfigPath, 'utf8');
-    return JSON.parse(fileContent);
-  } catch (error) {
-    console.error('Error reading tracking config:', error);
-    return {};
-  }
-};
-
-const getTrackingConfigForHost = (hostname) => {
+const getTrackingConfigForHost = async (hostname) => {
   if (!hostname) return {};
   const normalized = hostname.toLowerCase().replace(/^www\./, '');
-  const config = readTrackingConfig();
-  return config[hostname] || config[normalized] || {};
+  const db = getDB();
+  if (!db) return {};
+
+  const config = await db.collection('trackingConfig').findOne({ hostname: normalized });
+  return config || {};
 };
 
-app.get('/api/tracking-config', (req, res) => {
+const getAllTrackingConfigs = async () => {
+  const db = getDB();
+  if (!db) return [];
+  return await db.collection('trackingConfig').find({}).toArray();
+};
+
+const upsertTrackingConfig = async ({ hostname, cap, capType, always, cartExtra }) => {
+  const normalized = hostname.toLowerCase().replace(/^www\./, '');
+  const db = getDB();
+  if (!db) return null;
+
+  await db.collection('trackingConfig').updateOne(
+    { hostname: normalized },
+    {
+      $set: {
+        hostname: normalized,
+        cap: Number(cap) || 0,
+        capType: capType || 'daily',
+        always: Boolean(always),
+        cartExtra: Boolean(cartExtra)
+      }
+    },
+    { upsert: true }
+  );
+
+  return await getTrackingConfigForHost(normalized);
+};
+
+const deleteTrackingConfig = async (hostname) => {
+  const normalized = hostname.toLowerCase().replace(/^www\./, '');
+  const db = getDB();
+  if (!db) return false;
+
+  const result = await db.collection('trackingConfig').deleteOne({ hostname: normalized });
+  return result.deletedCount > 0;
+};
+
+const importTrackingConfigs = async (configs) => {
+  const db = getDB();
+  if (!db) return false;
+
+  const operations = Object.entries(configs).map(([hostname, cfg]) => {
+    const normalized = hostname.toLowerCase().replace(/^www\./, '');
+    return {
+      updateOne: {
+        filter: { hostname: normalized },
+        update: {
+          $set: {
+            hostname: normalized,
+            cap: Number(cfg.cap) || 0,
+            capType: cfg.capType || 'daily',
+            always: Boolean(cfg.always),
+            cartExtra: Boolean(cfg.cartExtra)
+          }
+        },
+        upsert: true
+      }
+    };
+  });
+
+  if (!operations.length) return false;
+  await db.collection('trackingConfig').bulkWrite(operations);
+  return true;
+};
+
+app.get('/api/tracking-config', async (req, res) => {
   const hostname = req.query.hostname;
   if (!hostname) {
     return res.status(400).json({ success: false, message: 'Hostname is required' });
   }
 
-  const hostConfig = getTrackingConfigForHost(hostname);
+  const hostConfig = await getTrackingConfigForHost(hostname);
   return res.json({ success: true, hostname, config: hostConfig });
+});
+
+app.get('/api/tracking-configs', async (req, res) => {
+  const configs = await getAllTrackingConfigs();
+  const configMap = configs.reduce((acc, cfg) => {
+    acc[cfg.hostname] = {
+      cap: cfg.cap,
+      capType: cfg.capType,
+      always: cfg.always,
+      cartExtra: cfg.cartExtra
+    };
+    return acc;
+  }, {});
+  return res.json({ success: true, config: configMap });
+});
+
+app.post('/api/update-tracking-config', async (req, res) => {
+  const { hostname, cap, capType, always, cartExtra } = req.body;
+  if (!hostname) {
+    return res.status(400).json({ success: false, message: 'Hostname is required' });
+  }
+
+  const config = await upsertTrackingConfig({ hostname, cap, capType, always, cartExtra });
+  if (!config) {
+    return res.status(500).json({ success: false, message: 'Failed to save tracking config' });
+  }
+
+  return res.json({ success: true, config });
+});
+
+app.post('/api/import-tracking-config', async (req, res) => {
+  const configs = req.body;
+  if (!configs || typeof configs !== 'object') {
+    return res.status(400).json({ success: false, message: 'Invalid config payload' });
+  }
+
+  const success = await importTrackingConfigs(configs);
+  if (!success) {
+    return res.status(500).json({ success: false, message: 'Failed to import configs' });
+  }
+
+  return res.json({ success: true, message: 'Configs imported successfully' });
+});
+
+app.delete('/api/tracking-config', async (req, res) => {
+  const hostname = req.query.hostname;
+  if (!hostname) {
+    return res.status(400).json({ success: false, message: 'Hostname is required' });
+  }
+
+  const deleted = await deleteTrackingConfig(hostname);
+  if (!deleted) {
+    return res.status(404).json({ success: false, message: 'Hostname not found' });
+  }
+
+  return res.json({ success: true, message: 'Tracking config deleted' });
+});
+
+app.get('/capping', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'capping.html'));
 });
 
 // API to update trackingUrls
@@ -285,7 +402,7 @@ app.post("/api/track-users", async (req, res) => {
   try {
     // 🔒 DAILY LIMIT CHECK
     console.log("🔥 /api/track-users HIT");
-    const hostConfig = getTrackingConfigForHost(origin);
+    const hostConfig = await getTrackingConfigForHost(origin);
     const limit = hostConfig.cap || 1000;
     const limitType = hostConfig.capType || 'daily';
     const allowed = await canTrackToday(origin, limit, limitType);
@@ -494,7 +611,7 @@ app.post('/api/track-user', async (req, res) => {
   }
 
   try {
-    const hostConfig = getTrackingConfigForHost(origin);
+    const hostConfig = await getTrackingConfigForHost(origin);
     const limit = hostConfig.cap || 1000;
     const limitType = hostConfig.capType || 'daily';
     const allowed = await canTrackToday(origin, limit, limitType);
@@ -504,7 +621,7 @@ app.post('/api/track-user', async (req, res) => {
       return res.json({
         success: false,
         blocked: true,
-        reason: 'DAILY_LIMIT_REACHED'
+        reason: limitType === 'total' ? 'TOTAL_LIMIT_REACHED' : 'DAILY_LIMIT_REACHED'
       });
     }
 
