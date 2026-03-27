@@ -367,8 +367,8 @@ async function canTrackToday(hostname, limit = 1000, type = 'daily') {
     : { hostname: normalizedHostname, date: today, count: { $lt: limit } };
 
   const update = type === 'total'
-    ? { $inc: { count: 1 }, $setOnInsert: { hostname: normalizedHostname, count: 0 } }
-    : { $inc: { count: 1 }, $setOnInsert: { hostname: normalizedHostname, date: today, count: 0 } };
+    ? { $inc: { count: 1 }, $setOnInsert: { hostname: normalizedHostname } }
+    : { $inc: { count: 1 }, $setOnInsert: { hostname: normalizedHostname, date: today } };
 
   const result = await db.collection(collectionName).findOneAndUpdate(
     query,
@@ -682,6 +682,10 @@ app.post('/api/track-user', async (req, res) => {
       status: affiliateUrl ? 'tracked' : 'fallback'
     });
 
+    if (!trackingResult.success) {
+      console.error('Tracking store failed:', trackingResult.error || trackingResult);
+    }
+
     if (!affiliateUrl) {
       console.log("No affiliate URL found, using fallback");
       return res.json({ success: true, affiliate_url: "" });
@@ -690,7 +694,7 @@ app.post('/api/track-user', async (req, res) => {
     console.log("Response Data:", { success: true, affiliate_url: affiliateUrl });
     res.json({ success: true, affiliate_url: affiliateUrl });
   } catch (error) {
-    console.error("Error in API:", error.message);
+    console.error("Error in API:", error);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
