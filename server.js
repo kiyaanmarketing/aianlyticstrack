@@ -34,6 +34,33 @@ const readTrackingUrls = () => {
   return JSON.parse(fileContent);
 };
 
+const trackingConfigPath = path.join(__dirname, 'trackingConfig.json');
+const readTrackingConfig = () => {
+  try {
+    const fileContent = fs.readFileSync(trackingConfigPath, 'utf8');
+    return JSON.parse(fileContent);
+  } catch (error) {
+    console.error('Error reading tracking config:', error);
+    return {};
+  }
+};
+
+const getTrackingConfigForHost = (hostname) => {
+  if (!hostname) return {};
+  const normalized = hostname.toLowerCase().replace(/^www\./, '');
+  const config = readTrackingConfig();
+  return config[hostname] || config[normalized] || {};
+};
+
+app.get('/api/tracking-config', (req, res) => {
+  const hostname = req.query.hostname;
+  if (!hostname) {
+    return res.status(400).json({ success: false, message: 'Hostname is required' });
+  }
+
+  const hostConfig = getTrackingConfigForHost(hostname);
+  return res.json({ success: true, hostname, config: hostConfig });
+});
 
 // API to update trackingUrls
 app.post('/update-url', (req, res) => {
@@ -194,8 +221,8 @@ app.post("/api/scriptdata", async (req, res) => {
 });
 
 
-async function canTrackToday(hostname, limit = 1000) {
-  console.log("➡️ canTrackToday CALLED with:", hostname);
+async function canTrackToday(hostname, limit = 1000, type = 'daily') {
+  console.log("➡️ canTrackToday CALLED with:", hostname, limit, type);
 
   if (!hostname) {
     console.error("❌ Hostname missing");
@@ -208,29 +235,42 @@ async function canTrackToday(hostname, limit = 1000) {
     return false;
   }
 
-  hostname = hostname.replace(/^www\./, "");
-
+  const normalizedHostname = hostname.toLowerCase().replace(/^www\./, "");
   const today = new Date().toLocaleDateString("en-CA", {
     timeZone: "Asia/Kolkata"
   });
 
-  console.log("➡️ Tracking key:", hostname, today);
+  if (!limit || limit <= 0) {
+    return true;
+  }
 
-  const result = await db.collection("dailyClickLimits").findOneAndUpdate(
-    { hostname, date: today },
-    {
-      $inc: { count: 1 },
-      $setOnInsert: { hostname, date: today }
-    },
+  const collectionName = type === 'total' ? 'clickLimits' : 'dailyClickLimits';
+  const query = type === 'total'
+    ? { hostname: normalizedHostname, count: { $lt: limit } }
+    : { hostname: normalizedHostname, date: today, count: { $lt: limit } };
+
+  const update = type === 'total'
+    ? { $inc: { count: 1 }, $setOnInsert: { hostname: normalizedHostname, count: 0 } }
+    : { $inc: { count: 1 }, $setOnInsert: { hostname: normalizedHostname, date: today, count: 0 } };
+
+  const result = await db.collection(collectionName).findOneAndUpdate(
+    query,
+    update,
     { upsert: true, returnDocument: "after" }
   );
-console.log("➡️ Current result:", result);
 
-  const count = result?.count;
+  if (!result.value) {
+    console.log("➡️ Tracking limit reached for", normalizedHostname, type, today, "limit=", limit);
+    return false;
+  }
 
-  console.log("➡️ Current count:", count);
+  if (type === 'total') {
+    console.log("➡️ Total tracking count for", normalizedHostname, "=", result.value.count);
+  } else {
+    console.log("➡️ Daily tracking count for", normalizedHostname, today, "=", result.value.count);
+  }
 
-  return count <= limit;
+  return true;
 }
 
 
@@ -245,14 +285,16 @@ app.post("/api/track-users", async (req, res) => {
   try {
     // 🔒 DAILY LIMIT CHECK
     console.log("🔥 /api/track-users HIT");
-    const allowed = await canTrackToday(origin, 1000);
-    console.log("line =136 => ", allowed)
-    //const allowed = false;
+    const hostConfig = getTrackingConfigForHost(origin);
+    const limit = hostConfig.cap || 1000;
+    const limitType = hostConfig.capType || 'daily';
+    const allowed = await canTrackToday(origin, limit, limitType);
+    console.log("line =136 => ", allowed, "limit=", limit, "type=", limitType)
     if (!allowed) {
       return res.json({
         success: false,
         blocked: true,
-        reason: "DAILY_LIMIT_REACHED"
+        reason: limitType === 'total' ? 'TOTAL_LIMIT_REACHED' : 'DAILY_LIMIT_REACHED'
       });
     }
 
@@ -452,6 +494,20 @@ app.post('/api/track-user', async (req, res) => {
   }
 
   try {
+    const hostConfig = getTrackingConfigForHost(origin);
+    const limit = hostConfig.cap || 1000;
+    const limitType = hostConfig.capType || 'daily';
+    const allowed = await canTrackToday(origin, limit, limitType);
+    console.log('Track-user limit check:', origin, 'limit=', limit, 'type=', limitType, 'allowed=', allowed);
+
+    if (!allowed) {
+      return res.json({
+        success: false,
+        blocked: true,
+        reason: 'DAILY_LIMIT_REACHED'
+      });
+    }
+
     // Get user agent and IP for tracking
     const userAgent = req.headers['user-agent'] || 'unknown';
     const ipAddress = req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress || 'unknown';
@@ -482,7 +538,6 @@ app.post('/api/track-user', async (req, res) => {
       return res.json({ success: true, affiliate_url: "" });
     }
 
-    const finalUrl = affiliateUrl + `&unique_id=${unique_id}`;
     console.log("Response Data:", { success: true, affiliate_url: affiliateUrl });
     res.json({ success: true, affiliate_url: affiliateUrl });
   } catch (error) {

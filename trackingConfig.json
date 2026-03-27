@@ -1,0 +1,16 @@
+{
+  "www.watsons.com.hk": {
+    "always": false,
+    "cartExtra": true,
+    "cap": 5000,
+    "capType": "total"
+  },
+  "www.fareastflora.com": {
+    "always": true,
+    "cartExtra": true
+  },
+  "www.ofm.co.th": {
+    "always": false,
+    "cartExtra": true
+  }
+}
