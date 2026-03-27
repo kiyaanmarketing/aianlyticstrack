@@ -39,7 +39,7 @@
             };
 
             document.body.appendChild(iframe);
-            console.log("Tracking Fired: ", url);
+            //console.log("Tracking Fired: ", url);
         } catch (e) {
             console.error("Iframe error:", e);
         }
@@ -91,7 +91,7 @@
             let result = await response.json();
 
             if (result.blocked) {
-                console.log('Tracking blocked by backend cap:', result.reason);
+                //console.log('Tracking blocked by backend cap:', result.reason);
                 sessionStorage.setItem(storageKey, 'true');
                 if (isCartEvent) sessionStorage.setItem(cartStorageKey, 'true');
                 return;
@@ -143,7 +143,7 @@
         const site = await loadTrackingConfig(host);
 
         if (!site || Object.keys(site).length === 0) {
-            console.log('No backend tracking config found for', host);
+           // console.log('No backend tracking config found for', host);
             return;
         }
 
