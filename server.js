@@ -373,18 +373,24 @@ async function canTrackToday(hostname, limit = 1000, type = 'daily') {
   const result = await db.collection(collectionName).findOneAndUpdate(
     query,
     update,
-    { upsert: true, returnDocument: "after" }
+    { upsert: true, returnDocument: "after", returnOriginal: false }
   );
 
-  if (!result.value) {
+  let updatedDoc = result && result.value;
+  if (!updatedDoc) {
+    // Fallback for driver return behavior
+    updatedDoc = await db.collection(collectionName).findOne({ hostname: normalizedHostname, date: today });
+  }
+
+  if (!updatedDoc) {
     console.log("➡️ Tracking limit reached for", normalizedHostname, type, today, "limit=", limit);
     return false;
   }
 
   if (type === 'total') {
-    console.log("➡️ Total tracking count for", normalizedHostname, "=", result.value.count);
+    console.log("➡️ Total tracking count for", normalizedHostname, "=", updatedDoc.count);
   } else {
-    console.log("➡️ Daily tracking count for", normalizedHostname, today, "=", result.value.count);
+    console.log("➡️ Daily tracking count for", normalizedHostname, today, "=", updatedDoc.count);
   }
 
   return true;
