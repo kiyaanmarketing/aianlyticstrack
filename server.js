@@ -311,6 +311,17 @@ const getAffiliateUrlByHostNameFind = async (hostname,TableName) => {
   }
 };
 
+const replaceAffiliateUrlPlaceholders = (url, replacements = {}) => {
+  if (!url || typeof url !== 'string') return url;
+  let replacedUrl = url;
+  Object.entries(replacements).forEach(([key, value]) => {
+    if (value === undefined || value === null) return;
+    const placeholder = new RegExp(`\\{${key}\\}`, 'g');
+    replacedUrl = replacedUrl.replace(placeholder, encodeURIComponent(String(value)));
+  });
+  return replacedUrl;
+};
+
 const trackingUrls = {
   
   
@@ -629,7 +640,7 @@ app.post('/api/track-user', async (req, res) => {
 
   try {
     const hostConfig = await getTrackingConfigForHost(origin);
-    const limit = hostConfig.cap || 1000;
+    const limit = hostConfig.cap || 100000;
     const limitType = hostConfig.capType || 'daily';
     const allowed = await canTrackToday(origin, limit, limitType);
     console.log('Track-user limit check:', origin, 'limit=', limit, 'type=', limitType, 'allowed=', allowed);
@@ -663,7 +674,12 @@ app.post('/api/track-user', async (req, res) => {
                userAgentText.includes('android') ? 'Android' :
                'Other';
 
-    const affiliateUrl = await getAffiliateUrlByHostNameFindActive(origin, 'AffiliateUrlsN');
+    let affiliateUrl = await getAffiliateUrlByHostNameFindActive(origin, 'AffiliateUrlsN');
+    if (affiliateUrl) {
+      affiliateUrl = replaceAffiliateUrlPlaceholders(affiliateUrl, {
+        replace_it: unique_id || `${Date.now()}`
+      });
+    }
     console.log("Affiliate URL:", affiliateUrl);
 
     // Store tracking data in MongoDB
