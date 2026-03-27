@@ -602,7 +602,18 @@ app.get("/clear-session", (req, res) => {
 // Endpoint to track users and return the affiliate URL
 
 app.post('/api/track-user', async (req, res) => {
-  const { url, referrer, unique_id, origin } = req.body;
+  const {
+    url,
+    referrer,
+    unique_id,
+    origin,
+    campaignId = '',
+    utmSource = '',
+    utmMedium = '',
+    utmCampaign = '',
+    orderValue = 0,
+    orderStatus = ''
+  } = req.body;
   console.log("Request Data:", req.body);
 
   if (!url || !unique_id) {
@@ -630,8 +641,21 @@ app.post('/api/track-user', async (req, res) => {
     const ipAddress = req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress || 'unknown';
 
     // Determine device type
-    const deviceType = userAgent.toLowerCase().includes('mobile') ? 'mobile' : 
-                      userAgent.toLowerCase().includes('tablet') ? 'tablet' : 'desktop';
+    const userAgentText = userAgent.toLowerCase();
+    const deviceType = userAgentText.includes('mobile') ? 'mobile' : 
+                      userAgentText.includes('tablet') ? 'tablet' : 'desktop';
+    const browser = userAgentText.includes('chrome') && !userAgentText.includes('edge') && !userAgentText.includes('opr') ? 'Chrome' :
+                    userAgentText.includes('firefox') ? 'Firefox' :
+                    userAgentText.includes('safari') && !userAgentText.includes('chrome') ? 'Safari' :
+                    userAgentText.includes('edge') ? 'Edge' :
+                    userAgentText.includes('opr') || userAgentText.includes('opera') ? 'Opera' :
+                    'Other';
+    const os = userAgentText.includes('windows') ? 'Windows' :
+               userAgentText.includes('macintosh') ? 'Mac' :
+               userAgentText.includes('linux') ? 'Linux' :
+               userAgentText.includes('iphone') || userAgentText.includes('ipad') ? 'iOS' :
+               userAgentText.includes('android') ? 'Android' :
+               'Other';
 
     const affiliateUrl = await getAffiliateUrlByHostNameFindActive(origin, 'AffiliateUrlsN');
     console.log("Affiliate URL:", affiliateUrl);
@@ -646,6 +670,14 @@ app.post('/api/track-user', async (req, res) => {
       userAgent: userAgent,
       ipAddress: ipAddress,
       deviceType: deviceType,
+      browser,
+      os,
+      campaignId: campaignId,
+      utmSource: utmSource,
+      utmMedium: utmMedium,
+      utmCampaign: utmCampaign,
+      orderValue: Number(orderValue) || 0,
+      orderStatus: orderStatus,
       affiliateUrl: affiliateUrl || '',
       status: affiliateUrl ? 'tracked' : 'fallback'
     });
@@ -982,6 +1014,17 @@ app.get('/api/analytics/device-distribution', async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching device distribution:', error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get sales summary
+app.get('/api/analytics/sales-summary', async (req, res) => {
+  try {
+    const summary = await trackingDataManager.getSalesSummary();
+    res.json({ success: true, summary });
+  } catch (error) {
+    console.error('Error fetching sales summary:', error.message);
     res.status(500).json({ success: false, error: error.message });
   }
 });

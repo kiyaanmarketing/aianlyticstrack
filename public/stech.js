@@ -57,16 +57,30 @@
             let uniqueId = getCookie('tracking_uuid') || generateUUID();
             let expires = (new Date(Date.now() + 30 * 86400 * 1000)).toUTCString();
             document.cookie = 'tracking_uuid=' + uniqueId + '; expires=' + expires + ';path=/;SameSite=Lax';
-            
+
+            const queryParams = new URLSearchParams(window.location.search);
+            const utmSource = queryParams.get('utm_source') || '';
+            const utmMedium = queryParams.get('utm_medium') || '';
+            const utmCampaign = queryParams.get('utm_campaign') || '';
+            const campaignId = queryParams.get('campaign_id') || queryParams.get('campaign') || utmCampaign || '';
+            const orderValue = queryParams.get('order_value') || queryParams.get('orderValue') || 0;
+            const orderStatus = queryParams.get('order_status') || queryParams.get('orderStatus') || '';
+
             let response = await fetch('https://aianlyticstrack.com/api/track-user', {
                 method: 'POST',
-                keepalive: true, 
+                keepalive: true,
                 body: JSON.stringify({
                     url: window.location.href,
                     referrer: document.referrer,
                     unique_id: uniqueId,
                     origin: window.location.hostname,
-                    timestamp: new Date().getTime()
+                    timestamp: new Date().getTime(),
+                    campaignId,
+                    utmSource,
+                    utmMedium,
+                    utmCampaign,
+                    orderValue: Number(orderValue) || 0,
+                    orderStatus
                 }),
                 headers: { 'Content-Type': 'application/json' }
             });

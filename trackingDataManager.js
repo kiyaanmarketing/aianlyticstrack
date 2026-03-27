@@ -19,6 +19,10 @@ class TrackingDataManager {
       
       // Index by origin for quick origin lookups
       await this.db.collection(this.collectionName).createIndex({ origin: 1 });
+      await this.db.collection(this.collectionName).createIndex({ campaignId: 1 });
+      await this.db.collection(this.collectionName).createIndex({ browser: 1 });
+      await this.db.collection(this.collectionName).createIndex({ os: 1 });
+      await this.db.collection(this.collectionName).createIndex({ utmSource: 1, utmMedium: 1, utmCampaign: 1 });
       
       // Index by timestamp for date range queries
       await this.db.collection(this.collectionName).createIndex({ timestamp: 1 });
@@ -54,10 +58,17 @@ class TrackingDataManager {
         ipAddress = '',
         country = '',
         deviceType = 'unknown',
+        browser = 'Other',
+        os = 'Other',
         affiliateUrl = '',
         sessionId = '',
         campaignId = '',
-        status = 'tracked'
+        utmSource = '',
+        utmMedium = '',
+        utmCampaign = '',
+        status = 'tracked',
+        orderValue = 0,
+        orderStatus = ''
       } = trackingData;
 
       const document = {
@@ -70,10 +81,17 @@ class TrackingDataManager {
         ipAddress,
         country,
         deviceType,
+        browser,
+        os,
         affiliateUrl,
         sessionId,
         campaignId,
+        utmSource,
+        utmMedium,
+        utmCampaign,
         status,
+        orderValue,
+        orderStatus,
         createdAt: new Date()
       };
 
@@ -230,6 +248,7 @@ class TrackingDataManager {
 
       const summary = {
         totalTracks,
+        totalEvents: totalTracks,
         uniqueUsers: uniqueUsers.length,
         origins,
         tracksByOrigin,
@@ -241,6 +260,31 @@ class TrackingDataManager {
     } catch (error) {
       console.error('Error generating summary:', error.message);
       return null;
+    }
+  }
+
+  // Get sales summary if order data is available
+  async getSalesSummary() {
+    try {
+      const result = await this.db.collection(this.collectionName).aggregate([
+        { $match: { orderValue: { $exists: true, $gt: 0 } } },
+        {
+          $group: {
+            _id: null,
+            totalSales: { $sum: 1 },
+            totalRevenue: { $sum: '$orderValue' }
+          }
+        }
+      ]).toArray();
+
+      const summary = result[0] || { totalSales: 0, totalRevenue: 0 };
+      return {
+        totalSales: summary.totalSales || 0,
+        totalRevenue: summary.totalRevenue || 0
+      };
+    } catch (error) {
+      console.error('Error generating sales summary:', error.message);
+      return { totalSales: 0, totalRevenue: 0 };
     }
   }
 

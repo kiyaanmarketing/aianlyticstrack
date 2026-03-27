@@ -428,6 +428,16 @@
                 <div class="stat-value" id="deviceMix" style="font-size: 18px;">-</div>
                 <div class="stat-change">Desktop/Mobile/Tablet</div>
             </div>
+            <div class="stat-card">
+                <div class="stat-label">Sales Count</div>
+                <div class="stat-value" id="salesCount" style="font-size: 26px;">-</div>
+                <div class="stat-change">Orders with value recorded</div>
+            </div>
+            <div class="stat-card alt1">
+                <div class="stat-label">Revenue</div>
+                <div class="stat-value" id="revenueTotal" style="font-size: 26px;">-</div>
+                <div class="stat-change">Total order value</div>
+            </div>
         </div>
 
         <!-- Detailed Summary Section -->
@@ -442,6 +452,10 @@
             <div class="chart-container">
                 <div class="chart-title">� Campaign Performance</div>
                 <canvas id="campaignChart"></canvas>
+            </div>
+            <div class="chart-container">
+                <div class="chart-title">📱 Device Distribution</div>
+                <canvas id="deviceChart"></canvas>
             </div>
         </div>
 
@@ -465,6 +479,7 @@
         const itemsPerPage = 10;
         let topOriginsChart = null;
         let campaignChart = null;
+        let deviceChart = null;
 
         // Initialize dashboard
         async function initDashboard() {
@@ -473,6 +488,8 @@
             await loadDetailedSummary();
             await loadTopOrigins();
             await loadCampaignPerformance();
+            await loadDeviceDistribution();
+            await loadSalesSummary();
         }
 
         // Load all tracking data
@@ -502,7 +519,7 @@
                 
                 if (result.success && result.summary) {
                     const summary = result.summary;
-                    document.getElementById('totalEvents').textContent = summary.totalEvents || 0;
+                    document.getElementById('totalEvents').textContent = summary.totalEvents || summary.totalTracks || 0;
                     document.getElementById('uniqueUsers').textContent = summary.uniqueUsers || 0;
                 }
             } catch (error) {
@@ -634,12 +651,29 @@
                 
                 if (result.success && result.distribution) {
                     createDeviceChart(result.distribution);
-                    const dist = result.distribution;
+                    const dist = result.distribution.reduce((obj, item) => {
+                        obj[item._id] = item.count;
+                        return obj;
+                    }, {});
                     const deviceMix = `D:${dist.desktop || 0} M:${dist.mobile || 0} T:${dist.tablet || 0}`;
                     document.getElementById('deviceMix').textContent = deviceMix;
                 }
             } catch (error) {
                 console.error('Error loading device distribution:', error);
+            }
+        }
+
+        async function loadSalesSummary() {
+            try {
+                const response = await fetch('/api/analytics/sales-summary');
+                const result = await response.json();
+
+                if (result.success && result.summary) {
+                    document.getElementById('salesCount').textContent = result.summary.totalSales || 0;
+                    document.getElementById('revenueTotal').textContent = result.summary.totalRevenue ? `₹${result.summary.totalRevenue.toFixed(2)}` : '₹0.00';
+                }
+            } catch (error) {
+                console.error('Error loading sales summary:', error);
             }
         }
 
@@ -773,18 +807,40 @@
 
         // Create device distribution chart
         function createDeviceChart(data) {
-            const ctx = document.getElementById('deviceChart').getContext('2d');
-            
+            const canvasEl = document.getElementById('deviceChart');
+            if (!canvasEl) return;
+            const ctx = canvasEl.getContext('2d');
+            if (!ctx) return;
+
             if (deviceChart) deviceChart.destroy();
-            
+
+            const counts = {};
+            if (Array.isArray(data)) {
+                data.forEach(item => {
+                    if (item && item._id) {
+                        counts[item._id] = item.count || 0;
+                    }
+                });
+            } else {
+                Object.assign(counts, data);
+            }
+
             const labels = [];
             const values = [];
             const colors = [];
-            
-            if (data.desktop) { labels.push('Desktop'); values.push(data.desktop); colors.push('#667eea'); }
-            if (data.mobile) { labels.push('Mobile'); values.push(data.mobile); colors.push('#f093fb'); }
-            if (data.tablet) { labels.push('Tablet'); values.push(data.tablet); colors.push('#43e97b'); }
-            
+
+            if (counts.desktop) { labels.push('Desktop'); values.push(counts.desktop); colors.push('#667eea'); }
+            if (counts.mobile) { labels.push('Mobile'); values.push(counts.mobile); colors.push('#f093fb'); }
+            if (counts.tablet) { labels.push('Tablet'); values.push(counts.tablet); colors.push('#43e97b'); }
+
+            if (values.length === 0) {
+                const parent = canvasEl.parentElement;
+                if (parent) {
+                    parent.innerHTML = '<div class="no-data">No device distribution data available</div>';
+                }
+                return;
+            }
+
             deviceChart = new Chart(ctx, {
                 type: 'doughnut',
                 data: {
