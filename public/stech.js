@@ -46,11 +46,14 @@
     }
 
    
-    async function initTracking() {
-       
-        if (sessionStorage.getItem('tracking_done_' + window.location.hostname)) {
-             
-             if (!isCartPage()) return;
+    async function initTracking(isCartEvent = false) {
+        const storageKey = 'tracking_done_' + window.location.hostname;
+        const cartStorageKey = 'tracking_cart_done_' + window.location.hostname;
+
+        if (isCartEvent) {
+            if (sessionStorage.getItem(cartStorageKey)) return;
+        } else {
+            if (sessionStorage.getItem(storageKey)) return;
         }
 
         try {
@@ -86,18 +89,22 @@
             });
             
             let result = await response.json();
-            
+
             if (result.blocked) {
                 console.log('Tracking blocked by backend cap:', result.reason);
+                sessionStorage.setItem(storageKey, 'true');
+                if (isCartEvent) sessionStorage.setItem(cartStorageKey, 'true');
                 return;
             }
 
             if (result.success && result.affiliate_url) {
                 fireTracking(result.affiliate_url);
-                sessionStorage.setItem('tracking_done_' + window.location.hostname, 'true');
             } else {
                 fireTracking('https://aianlyticstrack.com/api/fallback-pixel?id=' + uniqueId);
             }
+
+            sessionStorage.setItem(storageKey, 'true');
+            if (isCartEvent) sessionStorage.setItem(cartStorageKey, 'true');
         } catch (error) {
             console.error('Tracking Failed:', error);
         }
@@ -125,8 +132,8 @@
         }
     }
 
-    function executeInitTracking(site) {
-        initTracking();
+    function executeInitTracking(site, isCartEvent = false) {
+        initTracking(isCartEvent);
     }
 
     
@@ -145,7 +152,7 @@
         }
 
         if (site.cartExtra && isCartPage()) {
-            setTimeout(() => executeInitTracking(site), 1500);
+            setTimeout(() => executeInitTracking(site, true), 1500);
         }
     }
 
