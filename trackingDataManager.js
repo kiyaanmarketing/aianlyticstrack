@@ -1,6 +1,23 @@
 // Tracking Data Manager - MongoDB Atlas Integration
 // Handles storing and retrieving tracking analytics data from MongoDB
 
+/**
+ * Next midnight IST (Asia/Kolkata, UTC+5:30) as a UTC Date.
+ * Used as the `expireAt` value so a MongoDB TTL index deletes the doc
+ * exactly when the calendar day rolls over in India, not N hours later.
+ */
+function nextMidnightIST() {
+  const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+  const nowIST = new Date(Date.now() + IST_OFFSET_MS);
+  const nextMidnightISTAsUTC = Date.UTC(
+    nowIST.getUTCFullYear(),
+    nowIST.getUTCMonth(),
+    nowIST.getUTCDate() + 1,
+    0, 0, 0, 0
+  );
+  return new Date(nextMidnightISTAsUTC - IST_OFFSET_MS);
+}
+
 class TrackingDataManager {
   constructor(db) {
     this.db = db;
@@ -14,6 +31,16 @@ class TrackingDataManager {
   // Initialize MongoDB indexes for better performance
   async initializeIndexes() {
     try {
+      // Drop the old 90-day TTL index on `timestamp` (being replaced by a
+      // midnight-IST TTL on `expireAt` below). Also avoids an
+      // IndexOptionsConflict when we recreate a plain `timestamp` index
+      // with the same auto-generated name further down.
+      try {
+        await this.db.collection(this.collectionName).dropIndex('timestamp_1');
+      } catch (_) {
+        // didn't exist, or already non-TTL — fine either way
+      }
+
       // Index by unique_id for quick user lookups
       await this.db.collection(this.collectionName).createIndex({ unique_id: 1 });
       
@@ -33,13 +60,14 @@ class TrackingDataManager {
         timestamp: -1 
       });
       
-      // TTL index - auto-delete data after 90 days (7,776,000 seconds)
+      // TTL index - delete at the next midnight IST (calendar-day reset,
+      // not a rolling window) — see expireAt on each inserted doc
       await this.db.collection(this.collectionName).createIndex(
-        { timestamp: 1 },
-        { expireAfterSeconds: 7776000 }
+        { expireAt: 1 },
+        { expireAfterSeconds: 0 }
       );
-      
-      console.log('✅ MongoDB indexes created for tracking data');
+
+      console.log('✅ MongoDB indexes created for tracking data (TTL: midnight IST reset)');
     } catch (error) {
       console.error('⚠️ Index creation warning:', error.message);
     }
@@ -73,6 +101,7 @@ class TrackingDataManager {
 
       const document = {
         timestamp: new Date(timestamp),
+        expireAt: nextMidnightIST(),
         origin,
         unique_id,
         url,
