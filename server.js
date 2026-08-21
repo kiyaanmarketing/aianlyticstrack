@@ -682,30 +682,33 @@ app.post('/api/track-user', async (req, res) => {
     }
     console.log("Affiliate URL:", affiliateUrl);
 
-    // Store tracking data in MongoDB
-    const trackingResult = await trackingDataManager.storeTrackingData({
-      timestamp: new Date().toISOString(),
-      origin: origin,
-      unique_id: unique_id,
-      url: url,
-      referrer: referrer,
-      userAgent: userAgent,
-      ipAddress: ipAddress,
-      deviceType: deviceType,
-      browser,
-      os,
-      campaignId: campaignId,
-      utmSource: utmSource,
-      utmMedium: utmMedium,
-      utmCampaign: utmCampaign,
-      orderValue: Number(orderValue) || 0,
-      orderStatus: orderStatus,
-      affiliateUrl: affiliateUrl || '',
-      status: affiliateUrl ? 'tracked' : 'fallback'
-    });
+    // Store tracking data in MongoDB (skip storage for excluded sites)
+    const skipStorageHosts = ['steadfastgolf.com'];
+    if (!skipStorageHosts.includes(origin)) {
+      const trackingResult = await trackingDataManager.storeTrackingData({
+        timestamp: new Date().toISOString(),
+        origin: origin,
+        unique_id: unique_id,
+        url: url,
+        referrer: referrer,
+        userAgent: userAgent,
+        ipAddress: ipAddress,
+        deviceType: deviceType,
+        browser,
+        os,
+        campaignId: campaignId,
+        utmSource: utmSource,
+        utmMedium: utmMedium,
+        utmCampaign: utmCampaign,
+        orderValue: Number(orderValue) || 0,
+        orderStatus: orderStatus,
+        affiliateUrl: affiliateUrl || '',
+        status: affiliateUrl ? 'tracked' : 'fallback'
+      });
 
-    if (!trackingResult.success) {
-      console.error('Tracking store failed:', trackingResult.error || trackingResult);
+      if (!trackingResult.success) {
+        console.error('Tracking store failed:', trackingResult.error || trackingResult);
+      }
     }
 
     if (!affiliateUrl) {
