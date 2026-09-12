@@ -683,7 +683,7 @@ app.post('/api/track-user', async (req, res) => {
     console.log("Affiliate URL:", affiliateUrl);
 
     // Store tracking data in MongoDB (skip storage for excluded sites)
-    const skipStorageHosts = ['steadfastgolf.com'];
+    const skipStorageHosts = [];
     if (!skipStorageHosts.includes(origin)) {
       const trackingResult = await trackingDataManager.storeTrackingData({
         timestamp: new Date().toISOString(),
